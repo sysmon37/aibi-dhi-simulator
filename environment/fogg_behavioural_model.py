@@ -1,4 +1,35 @@
-# Behaviour = Motivation Ability (Trigger)
+from abc import ABC
+
+from gym import Env
+#habituation to prompts (after appox 3 weeks)
+# one episode is one day
+
+
+class Patient(Env):
+
+    def __init__(self, behaviour_threshold: int):
+        self.behaviour_threshold = behaviour_threshold
+
+    def reset(self):
+        pass
+
+    def step(self, action):
+        pass
+
+    def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
+        """"
+        Function that decides if the behaviour will be performed or not based on Fogg's Behavioural Model
+        """
+        behaviour = motivation * ability * trigger
+        return behaviour > self.behaviour_threshold
+
+
+
+
+
+
+
+
 
 
 def get_motivation():
