@@ -16,12 +16,16 @@ class Patient(Env):
         self.reset()
 
     def reset(self):
+        self.num_times_activity_suggested = 0
+        self.num_times_activity_performed = 0
         self.number_of_hours_slept_last_night = np.random.randint(3, 10)
         self.sufficient_sleep = 1 if self.number_of_hours_slept_last_night > 7 else 0
         self.valence = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
         self.cognitive_load = np.random.randint(0, 2)  # 0 low, 1 high
+        self.task_difficulty = np.random.randint(0, 2)  # 0 low, 1 high
+        self.task_length = np.random.randint(0, 2)  # 0 short, 1 long
         self.time_of_the_day = np.random.randint(0, 25)
         self.day_of_the_week = np.random.randint(0, 8)  # 0 Monday, 7 Sunday
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
@@ -29,7 +33,16 @@ class Patient(Env):
             np.random.choice(['stationary', 'walking', 'driving', 'sleeping'])
 
     def step(self, action):
-        pass
+
+        if action == 1:
+            self.num_times_activity_suggested += 1
+            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(), self.get_trigger())
+            if behaviour:
+                self.num_times_activity_performed += (1 + self.task_length)
+            reward = 10 if behaviour else -1
+        else:
+            reward = 0.1
+        return reward
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
         """"
@@ -61,6 +74,8 @@ class Patient(Env):
 
          - hours of sleep the previous night, sufficient(+), insufficient(-)
 
+         agency and motivation (MHealth)
+
         """
         return self.valence + self.has_family + self.last_activity_score + self.sufficient_sleep
 
@@ -71,22 +86,29 @@ class Patient(Env):
          "users were more receptive to prompts and memory training under low cognitive load than under high cognitive load"
         - cognitive load, high (-), low(+)
 
-        2) Goyal et al. (2017) users are likely to pay attention to the notifications at times of increasing arousal
-        - arousal, high (+), low (-)
 
-        3) Aminikhanghahi (2017) "Improving Smartphone Prompt Timing Through Activity Awareness"
-            "participants did not like to respond to AL queries when they were at work but were generally responsive
-             when they were relaxing " relaxing low cognitive load and positive valence
-             Ho et al. (2018). Location = [Home, Work, Other] , Motion activity = [Stationary, Walking, Running, Driving]
-         - home (+), other (-)
-         - stationary(+), walking(-), driving (-), sleeping (-)
+        2)self-efficacy/ confidence = positive responses rate  person who would fail in the past might be less confident
+        "Bandura (1997, p. 2) has defined perceived self-efficacy as ‘the belief in one’s capabilities
+        to organize and execute the courses of action required to produce given attainments.’
+        Numerous studies have investigated domain-specific self-efficacy that predicts corresponding intentions,
+         health behaviours, and health behaviour change (Burkert, Knoll,
+        Scholz, Roigas, & Gralla, 2012; Luszczynska & Schwarzer, 2005).
+        Bandura, A. (1997). Self-efficacy: The exercise of control. New York: Freeman.
+        Luszczynska, A., & Schwarzer, R. (2005). Social cognitive theory. In M. Connor & P. Norman (Eds.),
+        Predicting health behaviour (pp. 127–169). London: Open University Press
+        "
 
+        Other:
+        task_difficulty,
+        length
+        sequence mining SPADE
         """
         load = 1 if self.cognitive_load == 0 else 0
-        location = 1 if self.location == 'home' else 0
-        activity = 1 if self.activity == 'stationary' else 0
+        confidence = self.num_times_activity_performed / self.num_times_activity_suggested if self.num_times_activity_suggested> 0 else 0
+        task = 1 if self.task_difficulty == 0 else 0
+        length = 1 if self.task_length == 0 else 0  # shorter activity requires less ability
 
-        return self.arousal + load + location + activity
+        return confidence + load + task + length
 
     def get_trigger(self):
         """"
@@ -100,11 +122,28 @@ class Patient(Env):
         2) Akker etal (2015) "Tailored motivational message generation: A model and practical framework for real-time
          physical activity coaching"
 
-        """
-        effective_prompt = True if 15 > self.time_of_the_day >= 11 or (self.day_of_the_week > 5 and
-                                                                       self.activity != 'sleeping') else False
+                                     #Trigger
+        3) Goyal et al. (2017) users are likely to pay attention to the notifications at times of increasing arousal
+        - arousal, high (+), low (-) Notice a Trigger? --> in a future shall model as a continuum and only in mid
+         arousal effective
 
-        return effective_prompt
+        4) Aminikhanghahi (2017) "Improving Smartphone Prompt Timing Through Activity Awareness"
+            "participants did not like to respond to AL queries when they were at work but were generally responsive
+             when they were relaxing " relaxing low cognitive load and positive valence
+
+             Ho et al. (2018). Location = [Home, Work, Other] , Motion activity = [Stationary, Walking, Running, Driving]
+         - home (+), other (-)
+         - stationary(+), walking(-), driving (-)
+         - awake (+) sleeping (-)
+
+        """
+
+        prompt = 1 if self.activity != 'sleeping' else 0  # do not prompt when patient sleep
+        good_time = 1 if 15 > self.time_of_the_day >= 11 or (self.day_of_the_week > 5) else 0
+        good_location = 1 if self.location == 'home' else 0
+        good_activity = 1 if self.activity == 'stationary' else 0
+
+        return (self.arousal + good_time + good_location + good_activity) * prompt
 
 
 def update_patient_stress_level():

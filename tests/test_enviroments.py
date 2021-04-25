@@ -44,12 +44,11 @@ class PatientEnvironmentTest(unittest.TestCase):
         test_patient2.day_of_the_week =6
         test_patient2.activity = 'stationary'
         test_patient2.time_of_the_day = 11
-        self.assertTrue(test_patient2.get_trigger())
+        self.assertGreaterEqual(test_patient2.get_trigger(), 2)
 
         test_patient2 = Patient(2, False)
-        test_patient2.day_of_the_week = 6
         test_patient2.activity = 'sleeping'
-        self.assertFalse(test_patient2.get_trigger())
+        self.assertEqual(test_patient2.get_trigger(), 0)
 
 
 
