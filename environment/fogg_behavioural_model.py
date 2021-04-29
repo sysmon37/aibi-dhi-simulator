@@ -1,8 +1,10 @@
-from abc import ABC
+
 
 from gym import Env
 import numpy as np
-
+from collections import deque
+import random
+from numpy import sin
 
 # habituation to prompts (after appox 3 weeks)
 # one episode is one day
@@ -13,35 +15,42 @@ class Patient(Env):
     def __init__(self, behaviour_threshold: int, has_family: bool):
         self.behaviour_threshold = behaviour_threshold
         self.has_family = has_family
+        self.week_days = deque(np.arange(1, 8), maxlen=7)
+        self.hours = deque(np.arange(0, 24), maxlen=24)
         self.reset()
 
     def reset(self):
-        self.num_times_activity_suggested = 0
-        self.num_times_activity_performed = 0
-        self.number_of_hours_slept_last_night = np.random.randint(3, 10)
-        self.sufficient_sleep = 1 if self.number_of_hours_slept_last_night > 7 else 0
-        self.valence = np.random.randint(0, 2)  # 0 negative, 1 positive
+        self.activity_suggested = []
+        self.activity_performed = []
+        self._start_time_randomiser()
+        self.time_of_the_day = self.hours[0]
+        self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
+        self.motion_activity_list = random.choices(['stationary', 'walking', 'driving'],
+                                                   weights=(0.65, 0.2, 0.15),
+                                                   k=24)  # in last 24 hours
+        self.awake_list = random.choices(['sleep', 'awake'], weights=(0.2, 0.8), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
-        self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
-        self.cognitive_load = np.random.randint(0, 2)  # 0 low, 1 high
-        self.task_difficulty = np.random.randint(0, 2)  # 0 low, 1 high
-        self.task_length = np.random.randint(0, 2)  # 0 short, 1 long
-        self.time_of_the_day = np.random.randint(0, 25)
-        self.day_of_the_week = np.random.randint(0, 8)  # 0 Monday, 7 Sunday
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
-        self.activity = 'sleeping' if 1 < self.time_of_the_day < 5 else \
-            np.random.choice(['stationary', 'walking', 'driving', 'sleeping'])
+        self._update_emotional_state()
 
-    def step(self, action):
+    def step(self, action: tuple):
 
+        action, task_difficulty, task_length = action
         if action == 1:
-            self.num_times_activity_suggested += 1
-            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(), self.get_trigger())
+            self.activity_suggested.append(1)
+            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(task_difficulty, task_length),
+                                            self.get_trigger())
             if behaviour:
-                self.num_times_activity_performed += (1 + self.task_length)
-            reward = 10 if behaviour else -1
+                self.activity_performed.append(1 + task_length)
+                self.last_activity_score = np.random.randint(0, 2)
+                reward = 10
+            else:
+                self.activity_performed.append(0)
+                reward = -1
         else:
+            self.activity_performed.append(0)
             reward = 0.1
+        self.update_state()
         return reward
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
@@ -77,9 +86,11 @@ class Patient(Env):
          agency and motivation (MHealth)
 
         """
-        return self.valence + self.has_family + self.last_activity_score + self.sufficient_sleep
+        number_of_hours_slept = sum([1 for i in self.motion_activity_list[:-24] if i == 'sleeping'])
+        sufficient_sleep = 1 if number_of_hours_slept > 7 else 0
+        return self.valence + self.has_family + self.last_activity_score + sufficient_sleep
 
-    def get_ability(self):
+    def get_ability(self, task_difficulty, task_length):
         """"
         1)Chan et al (2020) "Prompto: Investigating Receptivity to Prompts Based on Cognitive Load from Memory Training
          Conversational Agent"
@@ -104,9 +115,10 @@ class Patient(Env):
         sequence mining SPADE
         """
         load = 1 if self.cognitive_load == 0 else 0
-        confidence = self.num_times_activity_performed / self.num_times_activity_suggested if self.num_times_activity_suggested> 0 else 0
-        task = 1 if self.task_difficulty == 0 else 0
-        length = 1 if self.task_length == 0 else 0  # shorter activity requires less ability
+        confidence = sum(self.activity_performed) / sum(self.activity_suggested) if sum(self.activity_suggested) > 0 \
+            else 0
+        task = 1 if task_difficulty == 0 else 0
+        length = 1 if task_length == 0 else 0  # shorter activity requires less ability
 
         return confidence + load + task + length
 
@@ -138,12 +150,84 @@ class Patient(Env):
 
         """
 
-        prompt = 1 if self.activity != 'sleeping' else 0  # do not prompt when patient sleep
+        prompt = 1 if self.awake_list[-1] != 'sleeping' else 0  # do not prompt when patient sleep
         good_time = 1 if 15 > self.time_of_the_day >= 11 or (self.day_of_the_week > 5) else 0
         good_location = 1 if self.location == 'home' else 0
-        good_activity = 1 if self.activity == 'stationary' else 0
+        good_activity = 1 if self.motion_activity_list[-1] == 'stationary' else 0
 
         return (self.arousal + good_time + good_location + good_activity) * prompt
+
+    def update_state(self):
+        self._update_time()
+        self._update_awake()
+        if self.awake_list[-1] == 'awake':
+            self._update_motion_activity()
+            self._update_location()
+            self._update_emotional_state()
+        else:
+            self.location = 'home'
+            self.motion_activity_list.append('stationary')
+            self.arousal = 0
+            self.cognitive_load = 0
+
+    def _update_day(self):
+
+        self.week_days.rotate(-1)
+        self.day_of_the_week = self.week_days[0]
+
+    def _update_time(self):
+
+        self.hours.rotate(-1)
+        self.time_of_the_day = self.hours[0]
+        if self.time_of_the_day == 0:
+            self._update_day()
+
+    def _start_time_randomiser(self):
+        for i in range(np.random.randint(0, len(self.week_days))):
+            self.week_days.rotate(-1)
+        for i in range(np.random.randint(0, len(self.hours))):
+            self.hours.rotate(-1)
+
+    def _update_emotional_state(self):
+        # random
+        self.valence = self._get_valence()  # 0 negative, 1 positive
+        self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+        self.cognitive_load = np.random.randint(0, 2)  # 0 low, 1 high
+
+    def _update_motion_activity(self):
+
+        if self.activity_performed[-1] == 1:
+            weights = (0, 1, 0)
+        else:
+            w = self.motion_activity_list.count('walking') / len(self.motion_activity_list)
+            st = self.motion_activity_list.count('stationary') / len(self.motion_activity_list)
+            d = self.motion_activity_list.count('driving') / len(self.motion_activity_list)
+            weights = (st, w, d)
+        self.motion_activity_list.append(random.choices(['stationary', 'walking', 'driving'], weights=weights, k=1)[0])
+
+    def _update_awake(self):
+
+        p = [0.3, 0.2, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.8, 0.9, 0.95, 0.95, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8, 0.8,
+             0.7, 0.7, 0.5, 0.4]
+
+        awake_prb = p[self.time_of_the_day]
+        now_awake = random.choices(['sleep', 'awake'], weights=(1-awake_prb, awake_prb), k=1)
+        self.awake_list.append(now_awake[0])
+
+    def _update_location(self):
+        if self.motion_activity_list[-1] in ['walking', 'driving']:
+            self.location = 'other'
+        else:
+            self.location = random.choices(['home', 'other'], weights=(0.8, 0.2), k=1)[0]
+
+    def _get_valence(self):
+        # Note so far not considering positive effect of intervention ! Static behaviour across days
+        param = [-5.34749718e-02,  8.77359961e+00, -1.65367766e-04,  8.75844092e-01] # fitted on MMASH dataset
+        positive_valence_prb = _sin_objective(self.time_of_the_day, *param)
+        return random.choices([0, 1], weights=(1-positive_valence_prb, positive_valence_prb), k=1)[0]
+
+def _sin_objective(x, a, b, c, d):
+    return a * sin(b - x) + c * x ** 2 + d
 
 
 def update_patient_stress_level():

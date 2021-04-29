@@ -18,8 +18,7 @@ class PatientEnvironmentTest(unittest.TestCase):
 
     def test_patient_motivation(self):
         test_patient = Patient(4, True)
-        self.assertIsNotNone(test_patient.number_of_hours_slept_last_night)
-        self.assertIsNotNone(test_patient.sufficient_sleep)
+        self.assertIsNotNone(test_patient.awake_list)
         self.assertIsNotNone(test_patient.last_activity_score)
         self.assertIsNotNone(test_patient.valence)
         self.assertLessEqual(test_patient.get_motivation(), 4)
@@ -29,10 +28,10 @@ class PatientEnvironmentTest(unittest.TestCase):
     def test_patient_ability(self):
         test_patient = Patient(2, False)
         self.assertIsNotNone(test_patient.location)
-        self.assertIsNotNone(test_patient.activity)
+        self.assertIsNotNone(test_patient.motion_activity_list)
         self.assertIsNotNone(test_patient.cognitive_load)
         self.assertIsNotNone(test_patient.arousal)
-        self.assertLessEqual(test_patient.get_ability(), 4)
+        self.assertLessEqual(test_patient.get_ability(1,1), 4)
 
     def test_trigger(self):
         test_patient = Patient(2, False)
@@ -41,15 +40,20 @@ class PatientEnvironmentTest(unittest.TestCase):
         self.assertIsNotNone(test_patient.get_trigger())
 
         test_patient2 = Patient(2, False)
-        test_patient2.day_of_the_week =6
-        test_patient2.activity = 'stationary'
+        test_patient2.day_of_the_week = 6
+        test_patient2.motion_activity_list.append('stationary')
         test_patient2.time_of_the_day = 11
         self.assertGreaterEqual(test_patient2.get_trigger(), 2)
 
         test_patient2 = Patient(2, False)
-        test_patient2.activity = 'sleeping'
+        test_patient2.awake_list.append('sleeping')
         self.assertEqual(test_patient2.get_trigger(), 0)
 
+    def test_update_time(self):
+        test_patient = Patient(9, False)
+        first_time = test_patient.time_of_the_day
+        test_patient._update_time()
+        self.assertNotEqual(test_patient.time_of_the_day, first_time)
 
 
 
