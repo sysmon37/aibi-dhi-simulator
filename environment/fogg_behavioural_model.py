@@ -48,10 +48,19 @@ class Patient(Env):
                 self.activity_performed.append(0)
                 reward = -1
         else:
+            self.activity_suggested.append(0)
             self.activity_performed.append(0)
             reward = 0.1
         self.update_state()
-        return reward
+
+        return self._get_current_state(), reward
+
+    def _get_current_state(self):
+        location = 1 if self.location == 'home' else 0
+        sleeping = 1 if self.awake_list[-1] == 'sleeping' else 0
+        d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking', 'driving'}))])
+        return (self.time_of_the_day, self.day_of_the_week-1, self.last_activity_score, location,
+                sleeping, self.valence, self.arousal, d[self.motion_activity_list[-1]], self.cognitive_load)
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
         """"
@@ -86,7 +95,7 @@ class Patient(Env):
          agency and motivation (MHealth)
 
         """
-        number_of_hours_slept = sum([1 for i in self.motion_activity_list[:-24] if i == 'sleeping'])
+        number_of_hours_slept = self.awake_list[:-24].count('sleeping')
         sufficient_sleep = 1 if number_of_hours_slept > 7 else 0
         return self.valence + self.has_family + self.last_activity_score + sufficient_sleep
 
@@ -151,11 +160,12 @@ class Patient(Env):
         """
 
         prompt = 1 if self.awake_list[-1] != 'sleeping' else 0  # do not prompt when patient sleep
-        good_time = 1 if 15 > self.time_of_the_day >= 11 or (self.day_of_the_week > 5) else 0
+        good_time = 1 if 15 > self.time_of_the_day >= 11 else 0
+        good_day = 1 if self.day_of_the_week > 5 else 0
         good_location = 1 if self.location == 'home' else 0
         good_activity = 1 if self.motion_activity_list[-1] == 'stationary' else 0
 
-        return (self.arousal + good_time + good_location + good_activity) * prompt
+        return (self.arousal + 0.5 *good_day + good_time + good_location + good_activity) * prompt
 
     def update_state(self):
         self._update_time()
