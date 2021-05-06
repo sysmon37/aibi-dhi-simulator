@@ -20,13 +20,13 @@ class Patient(Env):
         self.reset()
 
     def reset(self):
-        self.activity_suggested = []
-        self.activity_performed = []
+        self.activity_suggested = [0]
+        self.activity_performed = [0]
         self._start_time_randomiser()
         self.time_of_the_day = self.hours[0]
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
-        self.motion_activity_list = random.choices(['stationary', 'walking', 'driving'],
-                                                   weights=(0.65, 0.2, 0.15),
+        self.motion_activity_list = random.choices(['stationary', 'walking'],
+                                                   weights=(0.65, 0.35),
                                                    k=24)  # in last 24 hours
         self.awake_list = random.choices(['sleep', 'awake'], weights=(0.2, 0.8), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
@@ -35,22 +35,22 @@ class Patient(Env):
 
     def step(self, action: tuple):
 
-        action, task_difficulty, task_length = action
+        action, task_length = action
         if action == 1:
             self.activity_suggested.append(1)
-            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(task_difficulty, task_length),
+            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(task_length),
                                             self.get_trigger())
             if behaviour:
                 self.activity_performed.append(1 + task_length)
                 self.last_activity_score = np.random.randint(0, 2)
-                reward = 10
+                reward = 10 + task_length
             else:
                 self.activity_performed.append(0)
                 reward = -1
         else:
             self.activity_suggested.append(0)
             self.activity_performed.append(0)
-            reward = 0.1
+            reward = 0
         self.update_state()
 
         return self._get_current_state(), reward
@@ -58,8 +58,10 @@ class Patient(Env):
     def _get_current_state(self):
         location = 1 if self.location == 'home' else 0
         sleeping = 1 if self.awake_list[-1] == 'sleeping' else 0
-        d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking', 'driving'}))])
-        return (self.time_of_the_day, self.day_of_the_week-1, self.last_activity_score, location,
+        d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
+        week_day = self._get_week_day()
+        day_time = self._get_time_day()
+        return (day_time, week_day, self.last_activity_score, location,
                 sleeping, self.valence, self.arousal, d[self.motion_activity_list[-1]], self.cognitive_load)
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
@@ -99,7 +101,7 @@ class Patient(Env):
         sufficient_sleep = 1 if number_of_hours_slept > 7 else 0
         return self.valence + self.has_family + self.last_activity_score + sufficient_sleep
 
-    def get_ability(self, task_difficulty, task_length):
+    def get_ability(self, task_length):
         """"
         1)Chan et al (2020) "Prompto: Investigating Receptivity to Prompts Based on Cognitive Load from Memory Training
          Conversational Agent"
@@ -123,13 +125,13 @@ class Patient(Env):
         length
         sequence mining SPADE
         """
+        tired = 1 if self.activity_performed[-1] >1 else 0 # just performed the activiy if just performed it
         load = 1 if self.cognitive_load == 0 else 0
         confidence = sum(self.activity_performed) / sum(self.activity_suggested) if sum(self.activity_suggested) > 0 \
             else 0
-        task = 1 if task_difficulty == 0 else 0
         length = 1 if task_length == 0 else 0  # shorter activity requires less ability
 
-        return confidence + load + task + length
+        return confidence + load + tired + length
 
     def get_trigger(self):
         """"
@@ -160,12 +162,12 @@ class Patient(Env):
         """
 
         prompt = 1 if self.awake_list[-1] != 'sleeping' else 0  # do not prompt when patient sleep
-        good_time = 1 if 15 > self.time_of_the_day >= 11 else 0
-        good_day = 1 if self.day_of_the_week > 5 else 0
+        good_time = 1 if self._get_time_day() == 1 else 0
+        good_day = 1 if self._get_week_day() == 1 else 0
         good_location = 1 if self.location == 'home' else 0
         good_activity = 1 if self.motion_activity_list[-1] == 'stationary' else 0
 
-        return (self.arousal + 0.5 *good_day + good_time + good_location + good_activity) * prompt
+        return (self.arousal + good_day + good_time + good_location + good_activity) * prompt
 
     def update_state(self):
         self._update_time()
@@ -184,6 +186,22 @@ class Patient(Env):
 
         self.week_days.rotate(-1)
         self.day_of_the_week = self.week_days[0]
+
+    def _get_week_day(self):
+        if self.day_of_the_week <6:
+            return 0 # week day
+        else:
+            return 1 # weekend
+
+    def _get_time_day(self):
+        if 10> self.time_of_the_day >=6:
+            return 0 # morning
+        elif 16> self.time_of_the_day >=11:
+            return 1 # midday
+        elif 22> self.time_of_the_day >=16:
+            return 2 # evening
+        else:
+            return 3 # night
 
     def _update_time(self):
 
@@ -207,13 +225,12 @@ class Patient(Env):
     def _update_motion_activity(self):
 
         if self.activity_performed[-1] == 1:
-            weights = (0, 1, 0)
+            weights = (0, 1)
         else:
             w = self.motion_activity_list.count('walking') / len(self.motion_activity_list)
             st = self.motion_activity_list.count('stationary') / len(self.motion_activity_list)
-            d = self.motion_activity_list.count('driving') / len(self.motion_activity_list)
-            weights = (st, w, d)
-        self.motion_activity_list.append(random.choices(['stationary', 'walking', 'driving'], weights=weights, k=1)[0])
+            weights = (st, w)
+        self.motion_activity_list.append(random.choices(['stationary', 'walking'], weights=weights, k=1)[0])
 
     def _update_awake(self):
 
@@ -225,7 +242,7 @@ class Patient(Env):
         self.awake_list.append(now_awake[0])
 
     def _update_location(self):
-        if self.motion_activity_list[-1] in ['walking', 'driving']:
+        if self.motion_activity_list[-1] == 'walking':
             self.location = 'other'
         else:
             self.location = random.choices(['home', 'other'], weights=(0.8, 0.2), k=1)[0]
@@ -235,6 +252,9 @@ class Patient(Env):
         param = [-5.34749718e-02,  8.77359961e+00, -1.65367766e-04,  8.75844092e-01] # fitted on MMASH dataset
         positive_valence_prb = _sin_objective(self.time_of_the_day, *param)
         return random.choices([0, 1], weights=(1-positive_valence_prb, positive_valence_prb), k=1)[0]
+
+
+
 
 def _sin_objective(x, a, b, c, d):
     return a * sin(b - x) + c * x ** 2 + d
