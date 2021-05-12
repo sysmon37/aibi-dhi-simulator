@@ -1,10 +1,9 @@
-
-
 from gym import Env
 import numpy as np
 from collections import deque
 import random
 from numpy import sin
+
 
 # habituation to prompts (after appox 3 weeks)
 # one episode is one day
@@ -12,12 +11,64 @@ from numpy import sin
 
 class Patient(Env):
 
-    def __init__(self, behaviour_threshold: int, has_family: bool):
-        self.behaviour_threshold = behaviour_threshold
-        self.has_family = has_family
+    def __init__(self):
+        self.behaviour_threshold = None
+        self.has_family = None
+
+        # self.week_days = deque(np.arange(1, 8), maxlen=7)
+        # self.hours = deque(np.arange(0, 24), maxlen=24)
+        # self.reset()
+        # time_of_the_day = 4  # morning, midday, evening, night
+        # day_of_the_week = 2  # week day, weekend
+        # activity_score = 2  # low/ high
+        # location = 2  # home/ other
+        # sleeping = 2  # yes/no
+        # valence = 2  # positive/negative
+        # arousal = 2  # low/high
+        # motion = 2  # stationary, walking
+        # cognitive_load = 2  # low/ high
+        self.num_states = 1024
+        self.states_shape = (4, 2, 2, 2, 2, 2, 2, 2, 2)
+        self.states_array = np.arange(self.num_states).reshape(self.states_shape)
+        self.episode = 24  # one full day
+
+    @staticmethod
+    def _class2class(a):
+        actions = np.array([[0, 1], [2, 3]])
+        x, y = np.where(actions == a)
+        return x[0], y[0]
+
+    def env_init(self, env_info=None):
+
+        if env_info is None:
+            env_info = {}
+        self.behaviour_threshold = env_info["behaviour_threshold"]
+        self.has_family = env_info["has_family"]
         self.week_days = deque(np.arange(1, 8), maxlen=7)
         self.hours = deque(np.arange(0, 24), maxlen=24)
         self.reset()
+
+    def env_start(self):
+        """The first method called when the experiment starts, called before the
+        agent starts.
+
+        Returns:
+            The first state observation from the environment.
+        """
+        self.reset()
+        return self._get_current_state()
+
+    def env_step(self, action):
+        a = self._class2class(action)
+        last_state, reward = self.step(a)
+        self.env_steps = self.env_steps + 1
+        # print(self.env_steps )
+        if self.env_steps < self.episode:
+            term = False
+        else:
+            term = True
+
+        return reward, last_state, term
 
     def reset(self):
         self.activity_suggested = [0]
@@ -32,6 +83,7 @@ class Patient(Env):
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
         self._update_emotional_state()
+        self.env_steps = 0
 
     def step(self, action: tuple):
 
@@ -53,6 +105,7 @@ class Patient(Env):
             reward = 0
         self.update_state()
 
+
         return self._get_current_state(), reward
 
     def _get_current_state(self):
@@ -61,8 +114,10 @@ class Patient(Env):
         d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
         week_day = self._get_week_day()
         day_time = self._get_time_day()
-        return (day_time, week_day, self.last_activity_score, location,
-                sleeping, self.valence, self.arousal, d[self.motion_activity_list[-1]], self.cognitive_load)
+        return \
+            self.states_array[day_time][week_day][self.last_activity_score][location][sleeping][self.valence][
+                self.arousal][
+                d[self.motion_activity_list[-1]]][self.cognitive_load]
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
         """"
@@ -125,7 +180,7 @@ class Patient(Env):
         length
         sequence mining SPADE
         """
-        tired = 1 if self.activity_performed[-1] >1 else 0 # just performed the activiy if just performed it
+        tired = 1 if self.activity_performed[-1] > 1 else 0  # just performed the activiy if just performed it
         load = 1 if self.cognitive_load == 0 else 0
         confidence = sum(self.activity_performed) / sum(self.activity_suggested) if sum(self.activity_suggested) > 0 \
             else 0
@@ -188,20 +243,20 @@ class Patient(Env):
         self.day_of_the_week = self.week_days[0]
 
     def _get_week_day(self):
-        if self.day_of_the_week <6:
-            return 0 # week day
+        if self.day_of_the_week < 6:
+            return 0  # week day
         else:
-            return 1 # weekend
+            return 1  # weekend
 
     def _get_time_day(self):
-        if 10> self.time_of_the_day >=6:
-            return 0 # morning
-        elif 16> self.time_of_the_day >=11:
-            return 1 # midday
-        elif 22> self.time_of_the_day >=16:
-            return 2 # evening
+        if 10 > self.time_of_the_day >= 6:
+            return 0  # morning
+        elif 16 > self.time_of_the_day >= 11:
+            return 1  # midday
+        elif 22 > self.time_of_the_day >= 16:
+            return 2  # evening
         else:
-            return 3 # night
+            return 3  # night
 
     def _update_time(self):
 
@@ -238,7 +293,7 @@ class Patient(Env):
              0.7, 0.7, 0.5, 0.4]
 
         awake_prb = p[self.time_of_the_day]
-        now_awake = random.choices(['sleep', 'awake'], weights=(1-awake_prb, awake_prb), k=1)
+        now_awake = random.choices(['sleep', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
         self.awake_list.append(now_awake[0])
 
     def _update_location(self):
@@ -249,11 +304,9 @@ class Patient(Env):
 
     def _get_valence(self):
         # Note so far not considering positive effect of intervention ! Static behaviour across days
-        param = [-5.34749718e-02,  8.77359961e+00, -1.65367766e-04,  8.75844092e-01] # fitted on MMASH dataset
+        param = [-5.34749718e-02, 8.77359961e+00, -1.65367766e-04, 8.75844092e-01]  # fitted on MMASH dataset
         positive_valence_prb = _sin_objective(self.time_of_the_day, *param)
-        return random.choices([0, 1], weights=(1-positive_valence_prb, positive_valence_prb), k=1)[0]
-
-
+        return random.choices([0, 1], weights=(1 - positive_valence_prb, positive_valence_prb), k=1)[0]
 
 
 def _sin_objective(x, a, b, c, d):
