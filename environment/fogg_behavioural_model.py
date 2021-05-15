@@ -3,6 +3,7 @@ import numpy as np
 from collections import deque
 import random
 from numpy import sin
+from gym import error, spaces, utils
 
 
 # habituation to prompts (after appox 3 weeks)
@@ -14,6 +15,8 @@ class Patient(Env):
     def __init__(self):
         self.behaviour_threshold = None
         self.has_family = None
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Discrete(9)
 
         # self.week_days = deque(np.arange(1, 8), maxlen=7)
         # self.hours = deque(np.arange(0, 24), maxlen=24)
@@ -60,7 +63,7 @@ class Patient(Env):
 
     def env_step(self, action):
         a = self._class2class(action)
-        last_state, reward = self.step(a)
+        last_state, reward, info = self.step(a)
         self.env_steps = self.env_steps + 1
         # print(self.env_steps )
         if self.env_steps < self.episode:
@@ -68,7 +71,7 @@ class Patient(Env):
         else:
             term = True
 
-        return reward, last_state, term
+        return reward, last_state, term, info
 
     def reset(self):
         self.activity_suggested = [0]
@@ -88,14 +91,16 @@ class Patient(Env):
     def step(self, action: tuple):
 
         action, task_length = action
+        motiovation = self.get_motivation()
+        ability = self.get_ability(task_length)
+        trigger = self.get_trigger()
         if action == 1:
             self.activity_suggested.append(1)
-            behaviour = self.fogg_behaviour(self.get_motivation(), self.get_ability(task_length),
-                                            self.get_trigger())
+            behaviour = self.fogg_behaviour(motiovation, ability, trigger)
             if behaviour:
                 self.activity_performed.append(1 + task_length)
                 self.last_activity_score = np.random.randint(0, 2)
-                reward = 10 + task_length
+                reward = 100 + task_length
             else:
                 self.activity_performed.append(0)
                 reward = -1
@@ -103,10 +108,27 @@ class Patient(Env):
             self.activity_suggested.append(0)
             self.activity_performed.append(0)
             reward = 0
+        info = dict()
+        info['motivation'] = motiovation
+        info['ability'] = ability
+        info['trigger'] = trigger
+        info['action'] = action
+        info['task length'] = task_length
+        info['reward'] = reward
         self.update_state()
 
+        return self._get_current_state(), reward, info
 
-        return self._get_current_state(), reward
+    # def _get_current_state(self):
+    #     location = 1 if self.location == 'home' else 0
+    #     sleeping = 1 if self.awake_list[-1] == 'sleeping' else 0
+    #     d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
+    #     week_day = self._get_week_day()
+    #     day_time = self._get_time_day()
+    #     return \
+    #         self.states_array[day_time][week_day][self.last_activity_score][location][sleeping][self.valence][
+    #             self.arousal][
+    #             d[self.motion_activity_list[-1]]][self.cognitive_load]
 
     def _get_current_state(self):
         location = 1 if self.location == 'home' else 0
@@ -114,10 +136,8 @@ class Patient(Env):
         d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
         week_day = self._get_week_day()
         day_time = self._get_time_day()
-        return \
-            self.states_array[day_time][week_day][self.last_activity_score][location][sleeping][self.valence][
-                self.arousal][
-                d[self.motion_activity_list[-1]]][self.cognitive_load]
+        return np.array([day_time,week_day,self.last_activity_score, location,sleeping, self.valence,self.arousal,
+                d[self.motion_activity_list[-1]],self.cognitive_load])
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
         """"
@@ -180,7 +200,7 @@ class Patient(Env):
         length
         sequence mining SPADE
         """
-        tired = 1 if self.activity_performed[-1] > 1 else 0  # just performed the activiy if just performed it
+        tired = 0 if self.activity_performed[-1] > 0 else 1  # 0  if just performed activity otherwise rested
         load = 1 if self.cognitive_load == 0 else 0
         confidence = sum(self.activity_performed) / sum(self.activity_suggested) if sum(self.activity_suggested) > 0 \
             else 0
