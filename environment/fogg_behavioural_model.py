@@ -27,19 +27,11 @@ class Patient(Env):
         # location = 2  # home/ other
         # sleeping = 2  # yes/no
         # valence = 2  # positive/negative
-        # arousal = 2  # low/high
+        # arousal = 3  # low, mid, high
         # motion = 2  # stationary, walking
         # cognitive_load = 2  # low/ high
-        self.num_states = 1024
-        self.states_shape = (4, 2, 2, 2, 2, 2, 2, 2, 2)
-        self.states_array = np.arange(self.num_states).reshape(self.states_shape)
-        self.episode = 24  # one full day
+        # num time activity performed in last 24 hours, 0 less than 1, 1 if 1 , 2 or more
 
-    @staticmethod
-    def _class2class(a):
-        actions = np.array([[0, 1], [2, 3]])
-        x, y = np.where(actions == a)
-        return x[0], y[0]
 
     def env_init(self, env_info=None):
 
@@ -61,17 +53,6 @@ class Patient(Env):
         self.reset()
         return self._get_current_state()
 
-    def env_step(self, action):
-        a = self._class2class(action)
-        last_state, reward, info = self.step(a)
-        self.env_steps = self.env_steps + 1
-        # print(self.env_steps )
-        if self.env_steps < self.episode:
-            term = False
-        else:
-            term = True
-
-        return reward, last_state, term, info
 
     def reset(self):
         self.activity_suggested = [0]
@@ -80,8 +61,7 @@ class Patient(Env):
         self.time_of_the_day = self.hours[0]
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
         self.motion_activity_list = random.choices(['stationary', 'walking'],
-                                                   weights=(0.65, 0.35),
-                                                   k=24)  # in last 24 hours
+                                                   weights=(0.8, 0.2), k=24)  # in last 24 hours
         self.awake_list = random.choices(['sleep', 'awake'], weights=(0.2, 0.8), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
@@ -90,45 +70,36 @@ class Patient(Env):
 
     def step(self, action: tuple):
 
-        action, task_length = action
+        # action, task_length = action
         motiovation = self.get_motivation()
-        ability = self.get_ability(task_length)
+        ability = self.get_ability()
         trigger = self.get_trigger()
         if action == 1:
             self.activity_suggested.append(1)
             behaviour = self.fogg_behaviour(motiovation, ability, trigger)
             if behaviour:
-                self.activity_performed.append(1 + task_length)
-                self.last_activity_score = np.random.randint(0, 2)
-                reward = 100 + task_length
+                self.activity_performed.append(1 )
+                self.last_activity_score = 1 if self.valence == 1 else 0
+                reward = 20
             else:
                 self.activity_performed.append(0)
-                reward = -1
+                if sum(self.activity_suggested[-24:]) < 5:
+                    reward = -1
+                else:
+                    reward = -5
         else:
             self.activity_suggested.append(0)
             self.activity_performed.append(0)
-            reward = 0
+            reward = 0.0
         info = dict()
         info['motivation'] = motiovation
         info['ability'] = ability
         info['trigger'] = trigger
         info['action'] = action
-        info['task length'] = task_length
         info['reward'] = reward
         self.update_state()
 
-        return self._get_current_state(), reward, info
-
-    # def _get_current_state(self):
-    #     location = 1 if self.location == 'home' else 0
-    #     sleeping = 1 if self.awake_list[-1] == 'sleeping' else 0
-    #     d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
-    #     week_day = self._get_week_day()
-    #     day_time = self._get_time_day()
-    #     return \
-    #         self.states_array[day_time][week_day][self.last_activity_score][location][sleeping][self.valence][
-    #             self.arousal][
-    #             d[self.motion_activity_list[-1]]][self.cognitive_load]
+        return reward, self._get_current_state(), info
 
     def _get_current_state(self):
         location = 1 if self.location == 'home' else 0
@@ -136,8 +107,30 @@ class Patient(Env):
         d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
         week_day = self._get_week_day()
         day_time = self._get_time_day()
-        return np.array([day_time,week_day,self.last_activity_score, location,sleeping, self.valence,self.arousal,
-                d[self.motion_activity_list[-1]],self.cognitive_load])
+        n= self._activity_in_last_day()
+        t = self._time_since_last_activity()
+        number_of_hours_slept = self.awake_list[-24:].count('sleeping')
+        times_notified_last_day = sum(self.activity_suggested[-24:])
+        return np.array([day_time, week_day, self.last_activity_score,
+                         location, sleeping, self.valence, self.arousal, d[self.motion_activity_list[-1]],
+                         self.cognitive_load, n,t, number_of_hours_slept, times_notified_last_day])
+
+    def _activity_in_last_day(self):
+        n = sum(self.activity_performed[-24:])
+        if n == 0:
+            return 0
+        else:
+            if n <= 2:
+                return 1
+            else:
+                return 2
+
+    def _time_since_last_activity(self):
+        n = sum(self.activity_performed[-24:])
+        if n == 0:
+            return 1# more than 24 hours
+        else:
+            return 0
 
     def fogg_behaviour(self, motivation: int, ability: int, trigger: bool) -> bool:
         """"
@@ -172,11 +165,11 @@ class Patient(Env):
          agency and motivation (MHealth)
 
         """
-        number_of_hours_slept = self.awake_list[:-24].count('sleeping')
+        number_of_hours_slept = self.awake_list[-24:].count('sleeping')
         sufficient_sleep = 1 if number_of_hours_slept > 7 else 0
         return self.valence + self.has_family + self.last_activity_score + sufficient_sleep
 
-    def get_ability(self, task_length):
+    def get_ability(self):
         """"
         1)Chan et al (2020) "Prompto: Investigating Receptivity to Prompts Based on Cognitive Load from Memory Training
          Conversational Agent"
@@ -200,13 +193,21 @@ class Patient(Env):
         length
         sequence mining SPADE
         """
-        tired = 0 if self.activity_performed[-1] > 0 else 1  # 0  if just performed activity otherwise rested
+
+        n= self._activity_in_last_day() # 0  if the activity was already performed twice
+        if n == 2:
+            tired_of_repeating_the_activity = -1
+        elif n == 1:
+            tired_of_repeating_the_activity = 0
+        else:
+            tired_of_repeating_the_activity = 1
+
+        ready = self._time_since_last_activity()
         load = 1 if self.cognitive_load == 0 else 0
         confidence = sum(self.activity_performed) / sum(self.activity_suggested) if sum(self.activity_suggested) > 0 \
             else 0
-        length = 1 if task_length == 0 else 0  # shorter activity requires less ability
 
-        return confidence + load + tired + length
+        return confidence + load + tired_of_repeating_the_activity + ready
 
     def get_trigger(self):
         """"
@@ -240,9 +241,10 @@ class Patient(Env):
         good_time = 1 if self._get_time_day() == 1 else 0
         good_day = 1 if self._get_week_day() == 1 else 0
         good_location = 1 if self.location == 'home' else 0
-        good_activity = 1 if self.motion_activity_list[-1] == 'stationary' else 0
+        good_motion = 1 if self.motion_activity_list[-1] == 'stationary' else 0
+        good_arousal = 1 if self.arousal == 1 else 0
 
-        return (self.arousal + good_day + good_time + good_location + good_activity) * prompt
+        return (good_arousal + good_day + good_time + good_location + good_motion) * prompt
 
     def update_state(self):
         self._update_time()
@@ -293,8 +295,7 @@ class Patient(Env):
 
     def _update_emotional_state(self):
         # random
-        self.valence = self._get_valence()  # 0 negative, 1 positive
-        self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+        self._update_patient_stress_level() # updates arousal and valence
         self.cognitive_load = np.random.randint(0, 2)  # 0 low, 1 high
 
     def _update_motion_activity(self):
@@ -322,46 +323,48 @@ class Patient(Env):
         else:
             self.location = random.choices(['home', 'other'], weights=(0.8, 0.2), k=1)[0]
 
-    def _get_valence(self):
-        # Note so far not considering positive effect of intervention ! Static behaviour across days
-        param = [-5.34749718e-02, 8.77359961e+00, -1.65367766e-04, 8.75844092e-01]  # fitted on MMASH dataset
-        positive_valence_prb = _sin_objective(self.time_of_the_day, *param)
-        return random.choices([0, 1], weights=(1 - positive_valence_prb, positive_valence_prb), k=1)[0]
+    def _update_patient_stress_level(self):
+        """"
+        Stress = high arousal and negative valence Markova et al (2019) "arousal-valence emotion space"
+        in contrast to
+        Flow = high/mid arousal and positive valence//
 
+        Peifer et al (2014) "The relation of flow-experience and physiological arousal under stress — Can u shape it?"
+        "Physiological arousal during flow-experience between stress and relaxation"
 
-def _sin_objective(x, a, b, c, d):
-    return a * sin(b - x) + c * x ** 2 + d
+        1) Yoon et al (2014) "Understanding notification stress of smartphone messenger app"
+         - number of notification high (stress +), low (stress -)
 
+        2) Zhai et al (2020) "Associations among physical activity and smartphone use with perceived stress and sleep
+        quality of Chinese college students"
+         - insufficient exercise (stress +), exercise in past day (stress -)
+        """
 
-def update_patient_stress_level():
-    """"
-    Stress = high arousal and negative valence Markova et al (2019) "arousal-valence emotion space"
-    in contrast to
-    Flow = high/mid arousal and positive valence//
+        insufficient_exercise = 1 if self.activity_performed[-24:].count('walking') < 1 else 0
+        annoyed = 1 if sum(self.activity_suggested[-24:]) > 4 else 0
+        neg_factors = insufficient_exercise + annoyed
+        if neg_factors == 2:
+            self.valence = random.choices([0, 1], weights=(0.9, 0.1), k=1)[0]
+        elif neg_factors == 1:
+            self.valence = random.choices([0, 1], weights=(0.5, 0.5), k=1)[0]
+        else:
+            self.valence = 1
 
-    Peifer et al (2014) "The relation of flow-experience and physiological arousal under stress — Can u shape it?"
-    "Physiological arousal during flow-experience between stress and relaxation"
+        if neg_factors == 2:
+            self.arousal = 2
+        else:
+            self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
 
-    1) Yoon et al (2014) "Understanding notification stress of smartphone messenger app"
-     - number of notification high (stress +), low (stress -)
+    def update_patient_cognitive_load(self):
+        """"
 
-    2) Zhai et al (2020) "Associations among physical activity and smartphone use with perceived stress and sleep
-    quality of Chinese college students"
-     - insufficient exercise (stress +), exercise in past day (stress -)
-    """
-    pass
+        Okoshi et al (2015)  "Attelia: Reducing User’s Cognitive Load due to Interruptive Notifications on Smart Phones"
+        Okoshi et al (2017) "Attention and Engagement-Awareness in the Wild: A Large-Scale Study with Adaptive Notifications"
+        "notifications at detected breakpoint timing resulted in 46% lower cognitive load compared to randomly-timed
+         notifications"
+        """
+        self.cognitive_load = 1 if sum(self.activity_performed[-24:])/ sum(self.activity_suggested[-24:]) < 0.5 else 0
 
-
-def update_patient_cognitive_load():
-    """"
-
-    Okoshi et al (2015)  "Attelia: Reducing User’s Cognitive Load due to Interruptive Notifications on Smart Phones"
-    Okoshi et al (2017) "Attention and Engagement-Awareness in the Wild: A Large-Scale Study with Adaptive Notifications"
-    "notifications at detected breakpoint timing resulted in 46% lower cognitive load compared to randomly-timed
-     notifications"
-    """
-
-    pass
 
 
 def update_patient_arousal():
