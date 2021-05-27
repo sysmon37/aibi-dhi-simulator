@@ -110,8 +110,8 @@ class Patient(Env):
         day_time = self._get_time_day()
         n= self._activity_in_last_day()
         t = self._time_since_last_activity()
-        number_of_hours_slept = self.awake_list[-24:].count('sleeping')
-        overnotified = 1 if sum(self.activity_suggested[-24:])> 5 else 0
+        number_of_hours_slept = 1 if self.awake_list[-24:].count('sleeping') > 7 else 0
+        overnotified = 1 if sum(self.activity_suggested[-24:]) > 5 else 0
         return np.array([day_time, week_day, self.last_activity_score,
                          location, sleeping, self.valence, self.arousal, d[self.motion_activity_list[-1]],
                          self.cognitive_load, n,t, number_of_hours_slept, overnotified])
@@ -313,11 +313,11 @@ class Patient(Env):
 
         if sum(self.activity_performed[-24:]) > 0:
             #healthy sleeping
-            p = [0.2, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8,
-                 0.8, 0.7, 0.7, 0.45, 0.3]
+            p = [0.2, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8, 0.8,
+                 0.8, 0.75, 0.7, 0.5, 0.3]
         else:
-            p = [0.4, 0.3, 0.3, 0.3, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.9, 0.9, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8,
-                 0.75, 0.7, 0.7, 0.4, 0.3]
+            p = [0.4, 0.3, 0.3, 0.3, 0.3, 0.4, 0.6, 0.75, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8, 0.8,
+                 0.75, 0.75, 0.7, 0.5, 0.3]
 
         awake_prb = p[self.time_of_the_day]
         now_awake = random.choices(['sleeping', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
