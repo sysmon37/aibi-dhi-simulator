@@ -61,7 +61,7 @@ class Patient(Env):
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
         self.motion_activity_list = random.choices(['stationary', 'walking'],
                                                    weights=(0.8, 0.2), k=24)  # in last 24 hours
-        self.awake_list = random.choices(['sleep', 'awake'], weights=(0.2, 0.8), k=24)
+        self.awake_list = random.choices(['sleeping', 'awake'], weights=(0.2, 0.8), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
         self._update_emotional_state()
@@ -310,11 +310,16 @@ class Patient(Env):
 
     def _update_awake(self):
 
-        p = [0.3, 0.2, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.8, 0.9, 0.95, 0.95, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8, 0.8,
-             0.7, 0.7, 0.5, 0.4]
+        if sum(self.activity_performed[-24:]) > 0:
+            #healthy sleeping
+            p = [0.1, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8,
+                 0.8, 0.7, 0.7, 0.45, 0.3]
+        else:
+            p = [0.3, 0.3, 0.3, 0.3, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.9, 0.9, 0.95, 0.9, 0.95, 0.8, 0.8, 0.8,
+                 0.8, 0.7, 0.7, 0.4, 0.3]
 
         awake_prb = p[self.time_of_the_day]
-        now_awake = random.choices(['sleep', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
+        now_awake = random.choices(['sleeping', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
         self.awake_list.append(now_awake[0])
 
     def _update_location(self):
