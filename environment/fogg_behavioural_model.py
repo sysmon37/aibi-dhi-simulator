@@ -15,8 +15,8 @@ class Patient(Env):
     def __init__(self):
         self.behaviour_threshold = None
         self.has_family = None
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Discrete(9)
+        self.action_space = spaces.Discrete(2)
+        self.observation_space = spaces.Discrete(13)
 
         # self.week_days = deque(np.arange(1, 8), maxlen=7)
         # self.hours = deque(np.arange(0, 24), maxlen=24)
@@ -31,7 +31,6 @@ class Patient(Env):
         # motion = 2  # stationary, walking
         # cognitive_load = 2  # low/ high
         # num time activity performed in last 24 hours, 0 less than 1, 1 if 1 , 2 or more
-
 
     def env_init(self, env_info=None):
 
@@ -67,6 +66,7 @@ class Patient(Env):
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
         self._update_emotional_state()
         self.env_steps = 0
+        return self._get_current_state()
 
     def step(self, action: tuple):
 
