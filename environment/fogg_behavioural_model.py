@@ -62,8 +62,11 @@ class Patient(Env):
 
 
     def reset(self):
-        self.activity_suggested = [0]
-        self.activity_performed = [0]
+        self.activity_suggested = np.zeros(24)
+        self.activity_performed = np.zeros(24)
+        self.valence_list = []
+        self.arousal_list = []
+
         self._start_time_randomiser()
         self.time_of_the_day = self.hours[0]
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
@@ -86,7 +89,7 @@ class Patient(Env):
             self.activity_suggested.append(1)
             behaviour = self.fogg_behaviour(motiovation, ability, trigger)
             if behaviour:
-                self.activity_performed.append(1 )
+                self.activity_performed.append(1)
                 self.last_activity_score = 1 if self.valence == 1 else 0
                 reward = 20
             else:
@@ -105,8 +108,9 @@ class Patient(Env):
         info['trigger'] = trigger
         info['action'] = action
         info['reward'] = reward
-        self.update_state()
 
+        self.update_state()
+        self.env_steps += self.env_steps
         return self._get_current_state(), reward, False, info
 
     def _get_current_state(self):
@@ -266,6 +270,8 @@ class Patient(Env):
             self.motion_activity_list.append('stationary')
             self.arousal = 0
             self.cognitive_load = 0
+        self.valence_list.append(self.valence)
+        self.arousal_list.append(self.arousal)
 
     def _update_day(self):
 
