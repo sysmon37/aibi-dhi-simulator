@@ -64,8 +64,8 @@ class Patient(Env):
     def reset(self):
         self.activity_suggested = np.zeros(24).tolist()
         self.activity_performed = np.zeros(24).tolist()
-        self.valence_list = []
-        self.arousal_list = []
+        self.valence_list = random.choices([0, 1], weights=(0.8, 0.2), k=23)
+        self.arousal_list = random.choices([0, 1, 2], weights=(0.4, 0.2, 0.4), k=23)
 
         self._start_time_randomiser()
         self.time_of_the_day = self.hours[0]
@@ -389,7 +389,8 @@ class Patient(Env):
             else:
                 self.valence = 1
                 self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
-
+        self.valence_list.append(self.valence)
+        self.arousal_list.append(self.arousal)
 
 
     def update_patient_cognitive_load(self):
