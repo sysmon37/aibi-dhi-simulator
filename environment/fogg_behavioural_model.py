@@ -270,8 +270,8 @@ class Patient(Env):
             self.motion_activity_list.append('stationary')
             self.arousal = 0
             self.cognitive_load = 0
-        self.valence_list.append(self.valence)
-        self.arousal_list.append(self.arousal)
+            self.valence_list.append(self.valence)
+            self.arousal_list.append(self.arousal)
 
     def _update_day(self):
 
@@ -389,8 +389,8 @@ class Patient(Env):
             else:
                 self.valence = 1
                 self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
-        # self.valence_list.append(self.valence)
-        # self.arousal_list.append(self.arousal)
+        self.valence_list.append(self.valence)
+        self.arousal_list.append(self.arousal)
 
 
     def update_patient_cognitive_load(self):
