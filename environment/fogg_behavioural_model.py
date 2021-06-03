@@ -68,7 +68,7 @@ class Patient(Env):
         self.time_of_the_day = self.hours[0]
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
         self.motion_activity_list = random.choices(['stationary', 'walking'],
-                                                   weights=(0.8, 0.2), k=24)  # in last 24 hours
+                                                   weights=(0.95, 0.05), k=24)  # in last 24 hours
         self.awake_list = random.choices(['sleeping', 'awake'], weights=(0.2, 0.8), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
@@ -91,7 +91,7 @@ class Patient(Env):
                 reward = 20
             else:
                 self.activity_performed.append(0)
-                if sum(self.activity_suggested[-24:]) < 5:
+                if sum(self.activity_suggested[-24:]) < self.max_notification_tolarated:
                     reward = -1
                 else:
                     reward = -5
@@ -318,13 +318,24 @@ class Patient(Env):
 
     def _update_awake(self):
 
-        if sum(self.activity_performed[-24:]) > 0:
+        if sum(self.activity_performed[-48:]) > 1:
             #healthy sleeping
             p = [0.2, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8, 0.8,
                  0.8, 0.75, 0.7, 0.5, 0.3]
         else:
-            p = [0.4, 0.3, 0.3, 0.3, 0.3, 0.4, 0.6, 0.75, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8, 0.8,
-                 0.75, 0.75, 0.7, 0.5, 0.3]
+            if sum(self.activity_performed[-24:]) > 0:
+                # healthy sleeping
+                p = [0.3, 0.2, 0.2, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8,
+                     0.8,0.8, 0.75, 0.7, 0.5, 0.4]
+            else:
+                if self.arousal == 2 and self.valence == 0:
+                    # insomnia
+                    p = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.7, 0.8, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85,
+                         0.8,0.8, 0.75, 0.75, 0.7, 0.7, 0.6]
+                else:
+                    # unhealthy
+                    p = [0.4, 0.3, 0.3, 0.3, 0.4, 0.4, 0.6, 0.75, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85,
+                         0.8, 0.8, 0.75, 0.75, 0.7, 0.5, 0.4]
 
         awake_prb = p[self.time_of_the_day]
         now_awake = random.choices(['sleeping', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
@@ -355,18 +366,25 @@ class Patient(Env):
 
         insufficient_exercise = 1 if self.activity_performed[-24:].count('walking') < 1 else 0
         annoyed = 1 if sum(self.activity_suggested[-24:]) > 4 else 0
-        neg_factors = insufficient_exercise + annoyed
-        if neg_factors == 2:
-            self.valence = random.choices([0, 1], weights=(0.9, 0.1), k=1)[0]
-        elif neg_factors == 1:
-            self.valence = random.choices([0, 1], weights=(0.5, 0.5), k=1)[0]
-        else:
-            self.valence = 1
+        number_of_hours_slept = self.awake_list[-24:].count('sleeping')
+        insufficient_sleep = 1 if number_of_hours_slept < 7 else 0
+        neg_factors = insufficient_exercise + annoyed + insufficient_sleep
 
-        if neg_factors == 2:
-            self.arousal = 2
+        if self.activity_performed[-1] == 'walking':
+            self.valence = 1
+            self.arousal = 1
         else:
-            self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+            if neg_factors >= 2:
+                self.valence = random.choices([0, 1], weights=(0.95, 0.05), k=1)[0]
+                self.arousal = 2
+            elif neg_factors == 1:
+                self.valence = random.choices([0, 1], weights=(0.5, 0.5), k=1)[0]
+                self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+            else:
+                self.valence = 1
+                self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+
+
 
     def update_patient_cognitive_load(self):
         """"
