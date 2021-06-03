@@ -16,21 +16,28 @@ class Patient(Env):
         self.behaviour_threshold = None
         self.has_family = None
         self.action_space = spaces.Discrete(2)
-        self.observation_space = spaces.Discrete(13)
+        self.observation_space = spaces.MultiDiscrete([4, 2, 2,
+                                                       2, 2, 2,
+                                                       3, 2, 2,
+                                                       3, 2, 2, 2])
 
-        # self.week_days = deque(np.arange(1, 8), maxlen=7)
-        # self.hours = deque(np.arange(0, 24), maxlen=24)
-        # self.reset()
-        # time_of_the_day = 4  # morning, midday, evening, night
-        # day_of_the_week = 2  # week day, weekend
-        # activity_score = 2  # low/ high
-        # location = 2  # home/ other
-        # sleeping = 2  # yes/no
-        # valence = 2  # positive/negative
-        # arousal = 3  # low, mid, high
-        # motion = 2  # stationary, walking
-        # cognitive_load = 2  # low/ high
-        # num time activity performed in last 24 hours, 0 less than 1, 1 if 1 , 2 or more
+        # day_time = 0 # morning, midday, evening, night
+        # week_day  = 1 # week day, weekend
+        # last_activity_score =1 # low/ high
+
+        # location =0 # home/ other
+        # sleeping=0 # no/yes
+        # valence =1 #negative/ positive
+
+        # arousal = 1 # low, mid, high
+        # motion_activity = 0 #stationary, walking
+        # cognitive_load = 0 # low, high
+
+        # number_of_activity_perfromed = 0
+        # time_since_last_activity = 1 # less 0 or 1 more than 24 hours
+        # number_of_hours_slept =
+        
+        # overnotified = 1
 
     def env_init(self, env_info=None):
 
@@ -100,7 +107,7 @@ class Patient(Env):
         info['reward'] = reward
         self.update_state()
 
-        return reward, self._get_current_state(), info
+        return self._get_current_state(), reward, False, info
 
     def _get_current_state(self):
         location = 1 if self.location == 'home' else 0
