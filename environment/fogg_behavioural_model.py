@@ -62,8 +62,8 @@ class Patient(Env):
 
 
     def reset(self):
-        self.activity_suggested = np.zeros(24)
-        self.activity_performed = np.zeros(24)
+        self.activity_suggested = np.zeros(24).tolist()
+        self.activity_performed = np.zeros(24).tolist()
         self.valence_list = []
         self.arousal_list = []
 
@@ -370,13 +370,13 @@ class Patient(Env):
          - insufficient exercise (stress +), exercise in past day (stress -)
         """
 
-        insufficient_exercise = 1 if self.activity_performed[-24:].count('walking') < 1 else 0
+        insufficient_exercise = 1 if self.motion_activity_list[-24:].count('walking') < 1 else 0
         annoyed = 1 if sum(self.activity_suggested[-24:]) > 4 else 0
         number_of_hours_slept = self.awake_list[-24:].count('sleeping')
         insufficient_sleep = 1 if number_of_hours_slept < 7 else 0
         neg_factors = insufficient_exercise + annoyed + insufficient_sleep
 
-        if self.activity_performed[-1] == 'walking':
+        if self.motion_activity_list[-1] == 'walking':
             self.valence = 1
             self.arousal = 1
         else:
