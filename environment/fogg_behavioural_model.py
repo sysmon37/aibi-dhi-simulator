@@ -389,8 +389,8 @@ class Patient(Env):
             else:
                 self.valence = 1
                 self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
-        self.valence_list.append(self.valence)
-        self.arousal_list.append(self.arousal)
+        # self.valence_list.append(self.valence)
+        # self.arousal_list.append(self.arousal)
 
 
     def update_patient_cognitive_load(self):
