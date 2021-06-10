@@ -20,6 +20,7 @@ class Patient(Env):
                                                        2, 2, 2,
                                                        3, 2, 2,
                                                        3, 2, 2, 2])
+        self.steps = 0
 
         # day_time = 0 # morning, midday, evening, night
         # week_day  = 1 # week day, weekend
@@ -36,7 +37,7 @@ class Patient(Env):
         # number_of_activity_perfromed = 0
         # time_since_last_activity = 1 # less 0 or 1 more than 24 hours
         # number_of_hours_slept =
-        
+
         # overnotified = 1
 
     def env_init(self, env_info=None):
@@ -71,8 +72,8 @@ class Patient(Env):
         self.time_of_the_day = self.hours[0]
         self.day_of_the_week = self.week_days[0]  # 1 Monday, 7 Sunday
         self.motion_activity_list = random.choices(['stationary', 'walking'],
-                                                   weights=(0.95, 0.05), k=24)  # in last 24 hours
-        self.awake_list = random.choices(['sleeping', 'awake'], weights=(0.2, 0.8), k=24)
+                                                   weights=(1.0, 0.0), k=24)  # in last 24 hours
+        self.awake_list = random.choices(['sleeping', 'awake'], weights=(0.1, 0.9), k=24)
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
         self._update_emotional_state()
@@ -166,7 +167,7 @@ class Patient(Env):
 
         2) Dolsen et al (2017) "Sleep the night before and after a treatment session: A critical ingredient for
         treatment adherence?"
-        Axelsson et al (2020) "Sleepiness as motivation: a potential mechanism for how sleep deprivation affects behavior"
+        Axelsson et al (2020) V
 
         "sleepiness may be a central mechanism by which impaired alertness, for example, due to insufficient sleep,
         contributes to poor quality of life and adverse health. We propose that sleepiness helps organize behaviors
@@ -325,23 +326,28 @@ class Patient(Env):
     def _update_awake(self):
 
         if sum(self.activity_performed[-48:]) > 1:
-            #healthy sleeping
+            # healthy sleeping
             p = [0.2, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8, 0.8,
                  0.8, 0.75, 0.7, 0.5, 0.3]
         else:
-            if sum(self.activity_performed[-24:]) > 0:
+            if sum(self.activity_performed[-48:]) > 1:
                 # healthy sleeping
-                p = [0.3, 0.2, 0.2, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85, 0.8,
-                     0.8,0.8, 0.75, 0.7, 0.5, 0.4]
+                p = [0.2, 0.1, 0.1, 0.1, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.95, 0.8, 0.8,
+                     0.8, 0.75, 0.7, 0.5, 0.3]
             else:
-                if self.arousal == 2 and self.valence == 0:
-                    # insomnia
-                    p = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.7, 0.8, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85,
-                         0.8,0.8, 0.75, 0.75, 0.7, 0.7, 0.6]
+                if sum(self.activity_performed[-24:]) > 0:
+                    # healthy sleeping
+                    p = [0.3, 0.2, 0.2, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.85, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.95, 0.8,
+                         0.8, 0.8, 0.75, 0.7, 0.5, 0.4]
                 else:
-                    # unhealthy
-                    p = [0.4, 0.3, 0.3, 0.3, 0.4, 0.4, 0.6, 0.75, 0.85, 0.85, 0.95, 0.99, 0.99, 0.95, 0.95, 0.95, 0.85,
-                         0.8, 0.8, 0.75, 0.75, 0.7, 0.5, 0.4]
+                    if self.arousal == 2 and self.valence == 0:
+                        # insomnia
+                        p = [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.8, 0.8, 0.85, 0.85, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                             0.9, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8]
+                    else:
+                        # unhealthy
+                        p = [0.5, 0.5, 0.6, 0.7, 0.75, 0.75, 0.75, 0.75, 0.85, 0.85, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                             0.9, 0.8, 0.8, 0.9, 0.85, 0.8, 0.8, 0.8]
 
         awake_prb = p[self.time_of_the_day]
         now_awake = random.choices(['sleeping', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
