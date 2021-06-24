@@ -8,8 +8,9 @@ class PretrainingPatient(Patient):
         motiovation = self.get_motivation()
         ability = self.get_ability()
         trigger = self.get_trigger()
-        if self.steps < 15000:
+        if self.steps < 10000:
             reward = self.pretraining_reward(action)
+#             self.reset()
         else:
             reward = self.behaviour_based_reward(action, motiovation, ability, trigger)
 
@@ -21,12 +22,13 @@ class PretrainingPatient(Patient):
         info['reward'] = reward
 
         self.update_state()
-        self.steps += self.steps + 1
+        self.steps = self.steps + 1
         return self._get_current_state(), reward, False, info
 
     def pretraining_reward(self, action):
         day_time = self._get_time_day()
         if action == 1:
+            self.activity_suggested.append(1)
             if day_time == 1:
                 self.activity_performed.append(1)
                 reward = 20
