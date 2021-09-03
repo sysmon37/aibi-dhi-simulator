@@ -10,7 +10,6 @@ class PretrainingPatient(Patient):
         trigger = self.get_trigger()
         if self.steps < 10000:
             reward = self.pretraining_reward(action)
-#             self.reset()
         else:
             reward = self.behaviour_based_reward(action, motiovation, ability, trigger)
 
