@@ -6,17 +6,17 @@ import math
 from gym import error, spaces, utils
 
 
-# habituation to prompts (after appox 3 weeks)
 # one episode is one day
-
-
 
 class Patient(Env):
 
-    def __init__(self, behaviour_threshold=25, has_family=True, good_time=1):
+    def __init__(self, behaviour_threshold=25, has_family=True,
+                 good_time=1, habituation=False, time_preference_update_step = 100000000):
         self.behaviour_threshold = behaviour_threshold
         self.has_family = has_family
         self.good_time = good_time # 0 morning, 1 midday, 2 evening, 3 night
+        self.habituation = habituation
+        self.time_preference_update_step = time_preference_update_step
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.MultiDiscrete([2, 3, 2,
                                                        2, 2, 2, 2,
@@ -49,6 +49,7 @@ class Patient(Env):
         self._initialise_awake_probailities()
         self.h_slept = []
         self.h_positive = []
+        self.h_nonstationary = []
         self.observation_list = [self._get_current_state()]
         self.reset()
         # valence =1 #negative/ positive
@@ -72,6 +73,20 @@ class Patient(Env):
         self.hour_steps = 0
         return self._get_current_state()
 
+    def update_after_day(self):
+        if self.activity_s != 0:
+            self.rr.append(self.activity_p / self.activity_s)
+        else:
+            self.rr.append(np.nan)
+        self.num_performed.append(self.activity_p)
+        self.num_notified.append(self.activity_s)
+        self.h_slept.append(self.awake_list[-24:].count('sleeping'))
+        self.h_positive.append(sum(self.valence_list[-24:]))
+        self.h_nonstationary.append(self.motion_activity_list[-24:].count('walking'))
+        self.reset()
+        if self.habituation:
+            self.behaviour_threshold = self.behaviour_threshold + 0.15 # increase the threshold for performing action
+
     def step(self, action: tuple):
 
         # action, task_length = action
@@ -93,7 +108,6 @@ class Patient(Env):
                     reward = -1
                 else:
                     reward = -10
-
         else:
             reward = 0.0
         info = dict()
@@ -107,18 +121,12 @@ class Patient(Env):
         self.hour_steps = self.hour_steps + 1
         self.env_steps = self.env_steps + 1
         if self.hour_steps == 24:
-            if self.activity_s != 0:
-                self.rr.append(self.activity_p / self.activity_s)
-            else:
-                self.rr.append(np.nan)
-            self.num_performed.append(self.activity_p)
-            self.num_notified.append(self.activity_s)
-            self.h_slept.append(self.awake_list[-24:].count('sleeping'))
-            self.h_positive.append(sum(self.valence_list[-24:]))
-            self.reset()
+            self.update_after_day()
             done = True
         else:
             done = False
+        if self.env_steps > self.time_preference_update_step:
+            self.good_time = 2 # update time preference to be in the evening
         return self._get_current_state(), reward, done, info
 
     def _get_current_state(self):
