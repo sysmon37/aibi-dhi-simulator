@@ -102,7 +102,7 @@ class Patient(Env):
             if behaviour:
                 self.activity_p = self.activity_p + 1
                 self.activity_performed.append(1)
-                self.last_activity_score = 1 if self.valence == 1 else 0
+                self._update_patients_activity_score()
                 reward = 20
             else:
                 self.activity_performed.append(0)
@@ -330,22 +330,24 @@ class Patient(Env):
     def _update_emotional_state(self):
         # random
         self._update_patient_stress_level()  # updates arousal and valence
-        self.cognitive_load = np.random.randint(0, 2)  # 0 low, 1 high
+        self._update_patient_cognitive_load()  # 0 low, 1 high
 
     def _update_motion_activity(self):
 
         if self.activity_performed[-1] == 1:
             weights = (0, 1)
         else:
-            w = self.motion_activity_list.count('walking') / len(self.motion_activity_list)
-            st = self.motion_activity_list.count('stationary') / len(self.motion_activity_list)
+            threshold = 0.3 # equivalent to 6 h daily
+            w_r = self.motion_activity_list.count('walking') / len(self.motion_activity_list)
+            w = w_r if w_r < threshold else threshold
+            st = 1-w
             weights = (st, w)
         self.motion_activity_list.append(random.choices(['stationary', 'walking'], weights=weights, k=1)[0])
 
     def _update_awake(self):
 
         if sum(self.activity_performed[-24:]) > 0:
-            awake_prb = self.health_sleep[self.time_of_the_day] # very healthy sleeping
+            awake_prb = self.health_sleep[self.time_of_the_day] #  healthy sleeping
         else:
             if self.arousal == 2 and self.valence == 0:
                 awake_prb = self.insomnia[self.time_of_the_day]# insomnia
@@ -373,8 +375,8 @@ class Patient(Env):
 
     def _initialise_awake_probailities(self):
 
-        self.health_sleep = [self._awake_pattern(x, 0.15) for x in range(0, 24)]
-        self.semihealthy_sleep = [self._awake_pattern(x, 0.45) for x in range(0,24)]
+        self.health_sleep = [self._awake_pattern(x, 0.1) for x in range(0, 24)]
+        self.semihealthy_sleep = [self._awake_pattern(x, 0.4) for x in range(0,24)]
         self.insomnia = [self._awake_pattern(x, 0.6) for x in range(0,24)]
 
 
@@ -396,7 +398,7 @@ class Patient(Env):
         """
 
         insufficient_exercise = 1 if self.motion_activity_list[-24:].count('walking') < 1 else 0
-        annoyed = 1 if self.activity_s > 4 else 0
+        annoyed = 1 if self.activity_s > self.max_notification_tolarated else 0
         number_of_hours_slept = self.awake_list[-24:].count('sleeping')
         insufficient_sleep = 1 if number_of_hours_slept < 7 else 0
         neg_factors = insufficient_exercise + annoyed + insufficient_sleep
@@ -405,18 +407,18 @@ class Patient(Env):
             self.valence,  self.arousal = 1, 1
         else:
             if neg_factors >= 2:
-                self.valence = random.choices([0, 1], weights=(0.95, 0.05), k=1)[0]
+                self.valence = 0
                 self.arousal = 2
             elif neg_factors == 1:
-                self.valence = random.choices([0, 1], weights=(0.5, 0.5), k=1)[0]
-                self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+                self.valence = random.choices([0, 1], weights=(0.6, 0.4), k=1)[0]
+                self.arousal = random.choices([0, 1, 2], weights=(0.3,0.3, 0.4), k=1)[0]  
             else:
                 self.valence = 1
-                self.arousal = np.random.randint(0, 2)  # 0 low, 1 high
+                self.arousal = random.choices([0, 1, 2], weights=(0.3,0.4, 0.3), k=1)[0] 
         self.valence_list.append(self.valence)
         self.arousal_list.append(self.arousal)
 
-    def update_patient_cognitive_load(self):
+    def _update_patient_cognitive_load(self):
         """"
 
         Okoshi et al (2015)  "Attelia: Reducing User’s Cognitive Load due to Interruptive Notifications on Smart Phones"
@@ -424,9 +426,21 @@ class Patient(Env):
         "notifications at detected breakpoint timing resulted in 46% lower cognitive load compared to randomly-timed
          notifications"
         """
-        self.cognitive_load = 1 if self.activity_p / self.activity_s < 0.5 else 0
+        if self.activity_s> 0:
+            self.cognitive_load = 1 if self.activity_p / self.activity_s < 0.5 else 0
+        else:
+            self.cognitive_load = np.random.randint(0, 1) 
+            
+    def _update_patients_activity_score(self):
+        """"
+        Williams et al (2012) "Does Affective Valence During and Immediately Following a 10-Min Walk Predict Concurrent
+         and Future Physical Activity?"
+         "During-behavior affect is predictive of concurrent and future physical activity behavior"
 
-
+        """
+        self.last_activity_score = self.valence 
+        
+        
 def update_patient_arousal():
     """"
     Kusserow et al (2013) "Modeling arousal phases in daily living using wearable sensors"
@@ -464,14 +478,7 @@ def update_patient_valence():
     pass
 
 
-def update_patients_activity():
-    """"
-    Williams et al (2012) "Does Affective Valence During and Immediately Following a 10-Min Walk Predict Concurrent
-     and Future Physical Activity?"
-     "During-behavior affect is predictive of concurrent and future physical activity behavior"
 
-    """
-    pass
 
 
 def update_patients_sleep_duration():
