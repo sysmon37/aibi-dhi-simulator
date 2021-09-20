@@ -76,10 +76,12 @@ class Patient(Env):
     def update_after_day(self):
         if self.activity_s != 0:
             self.rr.append(self.activity_p / self.activity_s)
-        else:
+
+        else: # unsucessful training
             self.rr.append(np.nan)
-        self.num_performed.append(self.activity_p)
+            # self.num_notified.append(np.nan)
         self.num_notified.append(self.activity_s)
+        self.num_performed.append(self.activity_p)
         self.h_slept.append(self.awake_list[-24:].count('sleeping'))
         self.h_positive.append(sum(self.valence_list[-24:]))
         self.h_nonstationary.append(self.motion_activity_list[-24:].count('walking'))
