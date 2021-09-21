@@ -28,7 +28,7 @@ class Patient(Env):
         self.hour_steps = 0
         self.env_steps = 0
         self.max_notification_tolarated = 3
-        self.confidence_threshold = 5
+        self.confidence_threshold = 4
         self.week_days = deque(np.arange(1, 8), maxlen=7)
         self.hours = deque(np.arange(0, 24), maxlen=24)
         self.rr = []
@@ -76,7 +76,6 @@ class Patient(Env):
     def update_after_day(self):
         if self.activity_s != 0:
             self.rr.append(self.activity_p / self.activity_s)
-
         else: # unsucessful training
             self.rr.append(np.nan)
             # self.num_notified.append(np.nan)
@@ -345,14 +344,28 @@ class Patient(Env):
         self.motion_activity_list.append(random.choices(['stationary', 'walking'], weights=weights, k=1)[0])
 
     def _update_awake(self):
+        """"
+        Fairholme & Manber (2015) "Sleep, emotions, and emotion regulation: an overview"
+        "negative valence and high arousal potentially have unique effects on sleep architecture,
+        with high arousal being associated with reductions in slow-wave sleep and negative valence being associated
+        with disruptions to REM sleep"
+           - negative valence (-)
+           - high arousal (-)
 
-        if sum(self.activity_performed[-24:]) > 0:
-            awake_prb = self.health_sleep[self.time_of_the_day] #  healthy sleeping
+        Bisson et al (2019) "Walk to a better night of sleep: testing the relationship between physical
+        activity and sleep"
+        " on days that participants were more active than average,
+        they reported better sleep quality and duration in both sexes. Results suggest
+        that low-impact PA is positively related to sleep, more so in women than men"
+             - walking (+) """
+
+        if self.activity_p > 0:
+            awake_prb = self.health_sleep[self.time_of_the_day] # healthy sleeping
         else:
             if self.arousal == 2 and self.valence == 0:
                 awake_prb = self.insomnia[self.time_of_the_day]# insomnia
             else:
-                awake_prb =self.semihealthy_sleep[self.time_of_the_day]# semi-healthy
+                awake_prb = self.semihealthy_sleep[self.time_of_the_day]# semi-healthy
 
         now_awake = random.choices(['sleeping', 'awake'], weights=(1 - awake_prb, awake_prb), k=1)
         self.awake_list.append(now_awake[0])
@@ -375,10 +388,9 @@ class Patient(Env):
 
     def _initialise_awake_probailities(self):
 
-        self.health_sleep = [self._awake_pattern(x, 0.1) for x in range(0, 24)]
-        self.semihealthy_sleep = [self._awake_pattern(x, 0.4) for x in range(0,24)]
-        self.insomnia = [self._awake_pattern(x, 0.6) for x in range(0,24)]
-
+        self.health_sleep = [self._awake_pattern(x, 0.15) for x in range(0, 24)]
+        self.semihealthy_sleep = [self._awake_pattern(x, 0.35) for x in range(0, 24)]
+        self.insomnia = [self._awake_pattern(x, 0.6) for x in range(0, 24)]
 
     def _update_patient_stress_level(self):
         """"
@@ -410,11 +422,11 @@ class Patient(Env):
                 self.valence = 0
                 self.arousal = 2
             elif neg_factors == 1:
-                self.valence = random.choices([0, 1], weights=(0.6, 0.4), k=1)[0]
+                self.valence = random.choices([0, 1], weights=(0.5, 0.5), k=1)[0]
                 self.arousal = random.choices([0, 1, 2], weights=(0.3,0.3, 0.4), k=1)[0]  
             else:
                 self.valence = 1
-                self.arousal = random.choices([0, 1, 2], weights=(0.3,0.4, 0.3), k=1)[0] 
+                self.arousal = random.choices([0, 1, 2], weights=(0.3, 0.4, 0.3), k=1)[0]
         self.valence_list.append(self.valence)
         self.arousal_list.append(self.arousal)
 
@@ -480,24 +492,3 @@ def update_patient_valence():
 
 
 
-
-def update_patients_sleep_duration():
-    """"
-
-    Fairholme & Manber (2015) "Sleep, emotions, and emotion regulation: an overview"
-    "negative valence and high arousal potentially have unique effects on sleep architecture,
-    with high arousal being associated with reductions in slow-wave sleep and negative valence being associated
-    with disruptions to REM sleep"
-    - negative valence (-)
-    - high arousal (-)
-
-    Bisson et al (2019) "Walk to a better night of sleep: testing the relationship between physical activity and sleep"
-    " on days that participants were
-    more active than average, they reported better sleep quality and duration in both sexes. Results suggest
-    that low-impact PA is positively related to sleep, more so in women than men"
-
-    - walking (+)
-    """
-    pass
-
-#
