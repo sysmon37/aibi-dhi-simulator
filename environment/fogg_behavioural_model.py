@@ -90,7 +90,6 @@ class Patient(Env):
 
     def step(self, action: tuple):
 
-        # action, task_length = action
         motiovation = self.get_motivation()
         ability = self.get_ability()
         trigger = self.get_trigger()
