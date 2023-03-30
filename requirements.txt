@@ -2,6 +2,6 @@ gym
 numpy
 matplotlib
 pandas
-scikit_learn
+scikit-learn
 stable-baselines3
 
