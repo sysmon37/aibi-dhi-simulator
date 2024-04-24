@@ -1,5 +1,5 @@
+gymnasium
 pandas
-gym
 numpy
 matplotlib
 pandas

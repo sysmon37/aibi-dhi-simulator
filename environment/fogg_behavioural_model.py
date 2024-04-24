@@ -1,9 +1,9 @@
-from gym import Env
+from gymnasium import Env
 import numpy as np
 from collections import deque
 import random
 import math
-from gym import error, spaces, utils
+from gymnasium import error, spaces, utils
 
 
 # one episode is one day
@@ -27,7 +27,7 @@ class Patient(Env):
         self.activity_s = 0
         self.hour_steps = 0
         self.env_steps = 0
-        self.max_notification_tolarated = 3
+        self.max_notification_tolerated = 3
         self.confidence_threshold = 4
         self.week_days = deque(np.arange(1, 8), maxlen=7)
         self.hours = deque(np.arange(0, 24), maxlen=24)
@@ -67,11 +67,12 @@ class Patient(Env):
         # day_time = 0 # morning 6am-10am, midday 10am-6pm, evening 6pm-10pm, night 10pm-6am
         # week_day  = 1 # week day, weekend
 
-    def reset(self):
+    def reset(self, seed=None):
+        super().reset(seed=seed)
         self.activity_p = 0
         self.activity_s = 0
         self.hour_steps = 0
-        return self._get_current_state()
+        return self._get_current_state(), self._get_current_info(action=0)
 
     def update_after_day(self):
         if self.activity_s != 0:
@@ -89,13 +90,11 @@ class Patient(Env):
             self.behaviour_threshold = self.behaviour_threshold + 0.15 # increase the threshold for performing action
 
     def step(self, action: tuple):
+        info = self._get_current_info(action)
 
-        motiovation = self.get_motivation()
-        ability = self.get_ability()
-        trigger = self.get_trigger()
         if action == 1:
             self.activity_s = self.activity_s + 1
-            behaviour = self.fogg_behaviour(motiovation, ability, trigger)
+            behaviour = self.fogg_behaviour(info['motivation'], info['ability'], info['trigger'])
             self.observation_list.append(self._get_current_state())
             if behaviour:
                 self.activity_p = self.activity_p + 1
@@ -104,18 +103,13 @@ class Patient(Env):
                 reward = 20
             else:
                 self.activity_performed.append(0)
-                if self.activity_s < self.max_notification_tolarated:
+                if self.activity_s < self.max_notification_tolerated:
                     reward = -1
                 else:
                     reward = -10
         else:
             reward = 0.0
-        info = dict()
-        info['motivation'] = motiovation
-        info['ability'] = ability
-        info['trigger'] = trigger
-        info['action'] = action
-        info['reward'] = reward
+        # info['reward'] = reward
 
         self.update_state()
         self.hour_steps = self.hour_steps + 1
@@ -127,7 +121,19 @@ class Patient(Env):
             done = False
         if self.env_steps > self.time_preference_update_step:
             self.good_time = 2 # update time preference to be in the evening
-        return self._get_current_state(), reward, done, info
+        state = self._get_current_state() 
+        return state, reward, done, False, info
+
+
+    # Work-around for Gymnasium
+    def _get_current_info(self, action):
+        info = dict()
+        info['motivation'] = self.get_motivation()
+        info['ability'] = self.get_ability()
+        info['trigger'] = self.get_trigger()
+        info['action'] = action
+        return info
+
 
     def _get_current_state(self):
         # valence =1 #negative/ positive
@@ -153,10 +159,11 @@ class Patient(Env):
         t = self._time_since_last_activity()
         number_of_hours_slept = 1 if self.awake_list[-24:].count('sleeping') >= 7 else 0
 
-        return np.array([self.valence, self.arousal, self.cognitive_load,
+        obs = np.array([self.valence, self.arousal, self.cognitive_load,
                          sleeping, number_of_hours_slept, self.last_activity_score, t,
                          location, d[self.motion_activity_list[-1]],
                          day_time, week_day, self.activity_s, self.activity_p])
+        return obs
 
     def _time_since_last_activity(self):
         if self.activity_p == 0:
@@ -409,7 +416,7 @@ class Patient(Env):
         """
 
         insufficient_exercise = 1 if self.motion_activity_list[-24:].count('walking') < 1 else 0
-        annoyed = 1 if self.activity_s > self.max_notification_tolarated else 0
+        annoyed = 1 if self.activity_s > self.max_notification_tolerated else 0
         number_of_hours_slept = self.awake_list[-24:].count('sleeping')
         insufficient_sleep = 1 if number_of_hours_slept < 7 else 0
         neg_factors = insufficient_exercise + annoyed + insufficient_sleep
