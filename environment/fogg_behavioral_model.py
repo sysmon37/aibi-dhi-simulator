@@ -22,7 +22,7 @@ class Patient(Env):
                                                        2, 2, 2, 2,
                                                        2, 2,
                                                        4, 2,
-                                                       24, 24])
+                                                       25, 25])
         self.activity_p = 0
         self.activity_s = 0
         self.hour_steps = 0
@@ -45,6 +45,9 @@ class Patient(Env):
         self.awake_list = random.choices(['sleeping', 'awake'], weights=(0.15, 0.85), k=24)# insomnia
         self.last_activity_score = np.random.randint(0, 2)  # 0 negative, 1 positive
         self.location = 'home' if 1 < self.time_of_the_day < 7 else np.random.choice(['home', 'other'])
+        self.valence = 1
+        self.arousal = 1
+        self.cognitive_load = 0
         self._update_emotional_state()
         self._initialise_awake_probailities()
         self.h_slept = []
@@ -89,7 +92,7 @@ class Patient(Env):
         if self.habituation:
             self.behavior_threshold = self.behavior_threshold + 0.15 # increase the threshold for performing action
 
-    def step(self, action: tuple):
+    def step(self, action: int):
         info = self._get_current_info(action)
 
         if action == 1:
@@ -116,13 +119,15 @@ class Patient(Env):
         self.env_steps = self.env_steps + 1
         if self.hour_steps == 24:
             self.update_after_day()
-            done = True
+            terminated = True
         else:
-            done = False
+            terminated = False
         if self.env_steps > self.time_preference_update_step:
             self.good_time = 2 # update time preference to be in the evening
+        
+        truncated = False
         state = self._get_current_state() 
-        return state, reward, done, False, info
+        return state, reward, terminated, truncated, info
 
 
     # Work-around for Gymnasium
@@ -153,7 +158,7 @@ class Patient(Env):
 
         location = 1 if self.location == 'home' else 0
         sleeping = 1 if self.awake_list[-1] == 'sleeping' else 0
-        d = dict([(y, x) for x, y in enumerate(sorted({'stationary', 'walking'}))])
+        motion_activity = 1 if self.motion_activity_list[-1] == 'walking' else 0
         week_day = self._get_week_day()
         day_time = self._get_time_day()
         t = self._time_since_last_activity()
@@ -161,7 +166,7 @@ class Patient(Env):
 
         obs = np.array([self.valence, self.arousal, self.cognitive_load,
                          sleeping, number_of_hours_slept, self.last_activity_score, t,
-                         location, d[self.motion_activity_list[-1]],
+                         location, motion_activity,
                          day_time, week_day, self.activity_s, self.activity_p])
         return obs
 
@@ -447,7 +452,7 @@ class Patient(Env):
         if self.activity_s> 0:
             self.cognitive_load = 1 if self.activity_p / self.activity_s < 0.5 else 0
         else:
-            self.cognitive_load = np.random.randint(0, 1) 
+            self.cognitive_load = np.random.randint(0, 2) 
             
     def _update_patients_activity_score(self):
         """"
